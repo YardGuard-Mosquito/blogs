@@ -1,0 +1,26 @@
+# Logs and databases
+*.log
+*.sqlite
+
+# Build artifacts
+dist/
+build/
+out/
+*.exe
+*.dll
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment files
+.env
+.env.local
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
