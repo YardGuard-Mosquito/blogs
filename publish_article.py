@@ -5,9 +5,10 @@ import requests
 import google.generativeai as genai
 from datetime import datetime
 from io import StringIO
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 from typing import List, Dict, Optional
 import warnings
+import git  # Import GitPython
 
 # Suppress Gemini API warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="google.generativeai")
@@ -20,7 +21,11 @@ MAX_TOPIC_LENGTH = 200
 MAX_URLS = 5  # Maximum URLs to *process*, even if more are present
 DEFAULT_CATEGORY_ID = 1
 DEFAULT_TAG_ID = 13
-
+GIT_REPO_PATH = "/path/to/your/local/repo"  #  **CHANGE THIS** to your local repo path
+GIT_POSTS_FOLDER = "posts"  #  **CHANGE THIS** if your posts are in a different folder
+WORDPRESS_URL = "https://your-wordpress-site.com"  # **CHANGE THIS** to your site URL
+GIT_IT_WRITE_API_KEY = "YOUR_API_KEY"  # **CHANGE THIS** (if using API method)
+WORDPRESS_PATH = "/path/to/your/wordpress" # **CHANGE THIS** (if using WP-CLI)
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
     """
@@ -302,9 +307,94 @@ def extract_seo_keywords(content: str) -> List[str]:
         print(f"Keyword extraction error: {e}")
         return []
 
+def save_markdown_to_git(markdown_content: str, topic: str) -> bool:
+    """Saves the Markdown content to a file in the Git repository."""
+    try:
+        # Create a URL-safe slug from the topic
+        file_slug = quote_plus(topic.lower().replace(" ", "-"))
+        filename = f"{file_slug}.md"
+        filepath = os.path.join(GIT_REPO_PATH, GIT_POSTS_FOLDER, filename)
+
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        with open(filepath, "w") as f:
+            f.write(markdown_content)
+        print(f"Markdown saved to: {filepath}")
+        return True
+    except Exception as e:
+        print(f"Error saving Markdown to file: {e}")
+        return False
+
+def commit_and_push(message: str) -> bool:
+    """Commits and pushes changes to the Git repository."""
+    try:
+        repo = git.Repo(GIT_REPO_PATH)
+        repo.git.add(A=True)  # Stage all changes
+        repo.git.commit(m=message)
+        origin = repo.remote(name='origin')
+        origin.push()
+        print("Changes pushed to GitHub.")
+        return True
+    except git.exc.GitCommandError as e:
+        print(f"Git command error: {e}")
+        return False
+    except Exception as e:
+        print(f"Error during commit/push: {e}")
+        return False
+
+def trigger_git_it_write_pull(pull_type="changes"):
+    """
+    Hypothetical function to trigger a pull in "Git it Write".
+    This assumes the plugin provides a REST API endpoint.
+    """
+    if pull_type not in ["changes", "all"]:
+        raise ValueError("Invalid pull_type. Must be 'changes' or 'all'.")
+
+    endpoint = f"{WORDPRESS_URL}/wp-json/git-it-write/v1/pull"  # HYPOTHETICAL
+    headers = {
+        "Authorization": f"Bearer {GIT_IT_WRITE_API_KEY}",  # HYPOTHETICAL
+        "Content-Type": "application/json",
+    }
+    data = {
+        "repo_owner": "YardGuard-Mosquito",  #  Hardcoded for this example
+        "repo_name": "blogs",              #  Hardcoded for this example
+        "pull_type": pull_type,
+    }
+
+    try:
+        response = requests.post(endpoint, headers=headers, json=data)
+        response.raise_for_status()
+        print(f"Git it Write pull triggered successfully: {response.json()}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error triggering Git it Write pull: {e}")
+
+def trigger_git_it_write_wpcli(pull_type="changes"):
+    """
+    Hypothetical function to trigger a pull using WP-CLI.
+    """
+    if pull_type not in ["changes", "all"]:
+        raise ValueError("Invalid pull_type. Must be 'changes' or 'all'.")
+
+    command = [
+        "wp",
+        "--path=" + WORDPRESS_PATH,
+        "git-it-write",  # HYPOTHETICAL COMMAND NAME
+        "pull",
+        "--repo_owner=YardGuard-Mosquito",  # Hardcoded
+        "--repo_name=blogs",                # Hardcoded
+        "--pull_type=" + pull_type,
+    ]
+
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        print(f"Git it Write pull triggered via WP-CLI:\n{result.stdout}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error triggering Git it Write pull via WP-CLI:\n{e.stderr}")
+
 
 def main():
-    """Main function to orchestrate the article generation and posting."""
+    """Main function to orchestrate article generation and Git integration."""
     try:
         print("Initializing automated publisher...")
 
@@ -335,7 +425,7 @@ def main():
         if selected_topic['urls']:
             print(f"Including {len(selected_topic['urls'])} reference URLs")
         else:
-            print("No reference URLs provided.")  # Indicate when no URLs are used
+            print("No reference URLs provided.")
 
         print("\nGenerating article...")
         article = generate_markdown_article(selected_topic)
@@ -350,13 +440,27 @@ def main():
         if "## SEO Keywords" not in processed_article:
             print("Warning: SEO keywords section missing")
 
-        print("\nPosting to WordPress...")
-        success = post_to_wordpress(processed_article)
+        print("\nSaving Markdown to Git repository...")
+        if not save_markdown_to_git(processed_article, selected_topic['topic']):
+            raise ValueError("Failed to save Markdown to Git")
 
-        if success:
-            print("\nArticle published successfully!")
+        print("\nCommitting and pushing changes...")
+        # Use Webhook method if set up.  Otherwise, use a fallback.
+        if os.environ.get("GIT_IT_WRITE_WEBHOOK_SETUP") == "true":  # Check an environment variable
+            print("Webhook is set up. Committing and pushing...")
+            if not commit_and_push(f"Add article: {selected_topic['topic']}"):
+                raise ValueError("Git commit and push failed")
+            print("Article will be published automatically via webhook.")
         else:
-            print("\nPublication failed")
+            print("Webhook is NOT set up.  Attempting manual trigger...")
+            # Choose ONE of the hypothetical trigger methods (and uncomment it):
+            # trigger_git_it_write_pull()  # Hypothetical REST API
+            # trigger_git_it_write_wpcli() # Hypothetical WP-CLI
+            print("Manual trigger attempted. Check Git it Write logs for results.")
+            print("  **IMPORTANT:** Ensure you have configured the correct")
+            print("  trigger method (REST API or WP-CLI) and provided")
+            print("  the necessary credentials/paths in the constants.")
+
 
     except Exception as e:
         print(f"\nCritical error: {e}")
