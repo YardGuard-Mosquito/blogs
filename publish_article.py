@@ -1,5 +1,4 @@
 import os
-import re
 import csv
 import time
 import requests
@@ -18,20 +17,22 @@ MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 BACKOFF_FACTOR = 2
 MAX_TOPIC_LENGTH = 200
-MAX_URLS = 5
-DEFAULT_CATEGORY_ID = 1  # Default category ID if not provided or invalid
-DEFAULT_TAG_ID = 13 # Default tag ID
+MAX_URLS = 5  # Maximum URLs to *process*, even if more are present
+DEFAULT_CATEGORY_ID = 1
+DEFAULT_TAG_ID = 13
+
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
     """
-    Fetches topics and URLs from a Google Sheet.
+    Fetches topics and URLs from a Google Sheet.  URLs are now optional.
 
     Args:
         sheet_url: The URL of the Google Sheet.
 
     Returns:
         A list of dictionaries, where each dictionary represents a topic
-        and its associated URLs.  Returns an empty list on failure.
+        and its associated URLs (which may be an empty list).
+        Returns an empty list on failure.
     """
     session = requests.Session()
     adapter = requests.adapters.HTTPAdapter(max_retries=MAX_RETRIES)
@@ -53,7 +54,7 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
                     continue
                 raise requests.exceptions.HTTPError("Google Sheets API rate limit exceeded")
 
-            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            response.raise_for_status()
 
             csv_content = StringIO(response.text)
             reader = csv.DictReader(csv_content)
@@ -65,7 +66,7 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
                 raise ValueError("CSV missing required 'Topic' column")
 
             topics = []
-            for row_num, row in enumerate(reader, start=2):  # Start at 2 for 1-based indexing
+            for row_num, row in enumerate(reader, start=2):
                 topic = row.get('Topic', '').strip()
                 if not topic:
                     print(f"Skipping row {row_num}: Empty topic")
@@ -77,27 +78,28 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
 
                 url_list = []
                 raw_urls = row.get('URLs', '')
-                if raw_urls:
+                if raw_urls:  # Only process URLs if the field is not empty
                     for url in raw_urls.split('|'):
                         url = url.strip()
-                        if not url:
+                        if not url:  # Skip empty URLs after splitting
                             continue
                         try:
                             parsed = urlparse(url)
-                            if parsed.scheme and parsed.netloc:  # Check for valid scheme and netloc
+                            if parsed.scheme and parsed.netloc:
                                 if len(url_list) < MAX_URLS:
                                     url_list.append(url)
                                 else:
                                     print(f"Row {row_num}: Exceeded max URLs ({MAX_URLS}), truncating")
-                                    break  # Stop adding URLs for this row
+                                    break  # Stop processing URLs for this row
                             else:
                                 print(f"Row {row_num}: Invalid URL scheme - {url}")
                         except ValueError:
                             print(f"Row {row_num}: Malformed URL - {url}")
+                # else:  # No 'else' needed - url_list will be empty by default
 
                 topics.append({
                     'topic': topic,
-                    'urls': url_list
+                    'urls': url_list  # Always add the URL list, even if empty
                 })
 
             if not topics:
@@ -110,18 +112,19 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
             if attempt < MAX_RETRIES - 1:
                 time.sleep(RETRY_DELAY)
             else:
-                return []  # Return empty list after final failure
+                return []
 
         except (ValueError, csv.Error) as e:
             print(f"Processing error: {e}")
             return []
 
-    return []  # Should not reach here, but included for completeness
+    return []
 
 
 def validate_topic_data(topic_data: Dict) -> bool:
     """
     Validates the structure and content of a topic data dictionary.
+    URLs are now considered optional (can be an empty list).
 
     Args:
         topic_data: A dictionary containing topic information.
@@ -145,9 +148,8 @@ def validate_topic_data(topic_data: Dict) -> bool:
         print("Missing or invalid 'urls' field.")
         return False
 
-    if len(topic_data['urls']) > MAX_URLS:
-        print(f"Too many URLs provided (maximum {MAX_URLS}).")
-        return False
+    # No length check for 'urls' - it can be empty
+    # We still validate the *contents* of the list if it's not empty
 
     for url in topic_data['urls']:
         if not isinstance(url, str):
@@ -167,10 +169,10 @@ def validate_topic_data(topic_data: Dict) -> bool:
 
 def generate_markdown_article(topic_data: Dict) -> Optional[str]:
     """
-    Generates a Markdown article using the Gemini API.
+    Generates a Markdown article using the Gemini API.  Handles optional URLs.
 
     Args:
-        topic_data: A dictionary containing the topic and URLs.
+        topic_data: A dictionary containing the topic and URLs (which may be empty).
 
     Returns:
         The generated Markdown article as a string, or None on failure.
@@ -182,17 +184,17 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
     model = genai.GenerativeModel('gemini-pro')
 
     topic = topic_data['topic']
-    urls = topic_data['urls']
+    urls = topic_data['urls']  # URLs can now be an empty list
 
     try:
-        if urls:
+        if urls:  # Only create the links instruction if there are URLs
             links_list = '\n'.join([f"[{i+1}] {url}" for i, url in enumerate(urls)])
             links_instruction = f"""Include 2-4 contextual links in the article body using markdown format.
             Use these sources where appropriate:
             {links_list}
             Add a references section at the end with corresponding numbers."""
         else:
-            links_instruction = ""
+            links_instruction = ""  # No links instruction if no URLs
             print("No valid URLs provided - generating without external links")
 
         prompt = f"""Write a comprehensive 800-word technical article about {topic} using Markdown.
@@ -217,10 +219,19 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
 
         {links_instruction}
 
-        ## SEO Keywords
+        ## SEO Keywords  <-- MUST BE INCLUDED
         - Keyword1
         - Keyword2
         - Keyword3
+        - Keyword4
+        - Keyword5
+
+        You MUST include an "SEO Keywords" section with exactly 5 keywords, each on a new line, starting with a hyphen and a space.  Example:
+        - DengueFever
+        - MosquitoControl
+        - MarylandHealth
+        - VectorBorne
+        - PublicHealth
 
         Formatting Requirements:
         - Use H2 headings for main sections
@@ -235,9 +246,9 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
             generation_config=genai.types.GenerationConfig(
                 temperature=0.7,
                 top_p=0.9,
-                max_output_tokens=4000  # Increased max tokens
+                max_output_tokens=4000
             ),
-            safety_settings={  # Disable safety settings (careful!)
+            safety_settings={
                 'HARASSMENT': 'block_none',
                 'HATE_SPEECH': 'block_none',
                 'SEXUAL': 'block_none',
@@ -251,7 +262,7 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
         return response.text
 
     except genai.types.BlockedPromptError as e:
-        print(f"Content generation blocked: {e}")  # More specific error
+        print(f"Content generation blocked: {e}")
         return None
     except Exception as e:
         print(f"Generation error: {e}")
@@ -260,22 +271,21 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
 
 def add_references_section(content: str, urls: List[str]) -> str:
     """
-    Adds a formatted references section to the Markdown content.
+    Adds a formatted references section to the Markdown content (if URLs exist).
 
     Args:
         content: The Markdown content.
-        urls: A list of URLs to include in the references.
+        urls: A list of URLs to include in the references (can be empty).
 
     Returns:
-        The content with the added references section.
+        The content with the added references section (or original if no URLs).
     """
-    if not urls:
+    if not urls:  # No references if the URL list is empty
         return content
 
     references = "\n\n## References\n" + '\n'.join(
         [f"{i+1}. [{urlparse(url).netloc}]({url})" for i, url in enumerate(urls)]
     )
-    # Replace existing References section if present, otherwise insert before SEO Keywords
     return content.replace('## SEO Keywords', f"{references}\n\n## SEO Keywords")
 
 
@@ -297,7 +307,6 @@ def post_to_wordpress(content: str) -> bool:
         if not title:
             raise ValueError("Missing article title")
 
-        # Use default values if environment variables are missing or invalid
         try:
             category_id = int(os.getenv('WP_CATEGORY_ID', str(DEFAULT_CATEGORY_ID)))
         except ValueError:
@@ -323,12 +332,12 @@ def post_to_wordpress(content: str) -> bool:
         }
 
         response = requests.post(wp_endpoint, auth=auth, json=payload, timeout=30)
-        response.raise_for_status()  # Check for HTTP errors
+        response.raise_for_status()
         return True
 
     except requests.exceptions.RequestException as e:
         print(f"WordPress API Error: {e}")
-        if e.response is not None:  # Check if response is available
+        if e.response is not None:
             print(f"Response body: {e.response.text}")
         return False
     except Exception as e:
@@ -341,7 +350,7 @@ def extract_seo_keywords(content: str) -> List[str]:
     try:
         keywords_section = content.split("## SEO Keywords")[1]
         keywords = [line.replace('-', '').strip() for line in keywords_section.split('\n') if line.startswith('-')]
-        return keywords[:5]  # Limit to 5 keywords
+        return keywords[:5]
     except IndexError:
         print("SEO Keywords section not found or malformed.")
         return []
@@ -364,17 +373,16 @@ def main():
 
         if not topics:
             print("No valid topics found, using fallback")
-            # Fallback topic and URLs
             topics = [{
                 'topic': 'Recent Advances in Artificial Intelligence',
-                'urls': ['https://example.com/ai-advances']  # Example URL
+                'urls': []  # Empty URL list for the fallback
             }]
 
         selected_topic = None
         for topic in topics:
             if validate_topic_data(topic):
                 selected_topic = topic
-                break  # Use the first valid topic
+                break
 
         if not selected_topic:
             raise ValueError("No valid topics available for processing")
@@ -382,6 +390,8 @@ def main():
         print(f"Selected topic: {selected_topic['topic']}")
         if selected_topic['urls']:
             print(f"Including {len(selected_topic['urls'])} reference URLs")
+        else:
+            print("No reference URLs provided.")  # Indicate when no URLs are used
 
         print("\nGenerating article...")
         article = generate_markdown_article(selected_topic)
@@ -394,7 +404,7 @@ def main():
 
         print("\nValidating final content...")
         if "## SEO Keywords" not in processed_article:
-            print("Warning: SEO keywords section missing")  # Just a warning
+            print("Warning: SEO keywords section missing")
 
         print("\nPosting to WordPress...")
         success = post_to_wordpress(processed_article)
@@ -406,7 +416,7 @@ def main():
 
     except Exception as e:
         print(f"\nCritical error: {e}")
-        raise  # Re-raise the exception for full traceback
+        raise
 
 
 if __name__ == "__main__":
