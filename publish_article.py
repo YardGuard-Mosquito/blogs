@@ -23,9 +23,7 @@ DEFAULT_CATEGORY_ID = 1
 DEFAULT_TAG_ID = 13
 GIT_REPO_PATH = "/path/to/your/local/repo"  #  **CHANGE THIS** to your local repo path
 GIT_POSTS_FOLDER = "posts"  #  **CHANGE THIS** if your posts are in a different folder
-WORDPRESS_URL = "https://your-wordpress-site.com"  # **CHANGE THIS** to your site URL
-GIT_IT_WRITE_API_KEY = "YOUR_API_KEY"  # **CHANGE THIS** (if using API method)
-WORDPRESS_PATH = "/path/to/your/wordpress" # **CHANGE THIS** (if using WP-CLI)
+
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
     """
@@ -343,58 +341,9 @@ def commit_and_push(message: str) -> bool:
         print(f"Error during commit/push: {e}")
         return False
 
-def trigger_git_it_write_pull(pull_type="changes"):
-    """
-    Hypothetical function to trigger a pull in "Git it Write".
-    This assumes the plugin provides a REST API endpoint.
-    """
-    if pull_type not in ["changes", "all"]:
-        raise ValueError("Invalid pull_type. Must be 'changes' or 'all'.")
-
-    endpoint = f"{WORDPRESS_URL}/wp-json/git-it-write/v1/pull"  # HYPOTHETICAL
-    headers = {
-        "Authorization": f"Bearer {GIT_IT_WRITE_API_KEY}",  # HYPOTHETICAL
-        "Content-Type": "application/json",
-    }
-    data = {
-        "repo_owner": "YardGuard-Mosquito",  #  Hardcoded for this example
-        "repo_name": "blogs",              #  Hardcoded for this example
-        "pull_type": pull_type,
-    }
-
-    try:
-        response = requests.post(endpoint, headers=headers, json=data)
-        response.raise_for_status()
-        print(f"Git it Write pull triggered successfully: {response.json()}")
-    except requests.exceptions.RequestException as e:
-        print(f"Error triggering Git it Write pull: {e}")
-
-def trigger_git_it_write_wpcli(pull_type="changes"):
-    """
-    Hypothetical function to trigger a pull using WP-CLI.
-    """
-    if pull_type not in ["changes", "all"]:
-        raise ValueError("Invalid pull_type. Must be 'changes' or 'all'.")
-
-    command = [
-        "wp",
-        "--path=" + WORDPRESS_PATH,
-        "git-it-write",  # HYPOTHETICAL COMMAND NAME
-        "pull",
-        "--repo_owner=YardGuard-Mosquito",  # Hardcoded
-        "--repo_name=blogs",                # Hardcoded
-        "--pull_type=" + pull_type,
-    ]
-
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        print(f"Git it Write pull triggered via WP-CLI:\n{result.stdout}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error triggering Git it Write pull via WP-CLI:\n{e.stderr}")
-
 
 def main():
-    """Main function to orchestrate article generation and Git integration."""
+    """Main function: Generates article, saves to Git, commits, and pushes."""
     try:
         print("Initializing automated publisher...")
 
@@ -445,21 +394,9 @@ def main():
             raise ValueError("Failed to save Markdown to Git")
 
         print("\nCommitting and pushing changes...")
-        # Use Webhook method if set up.  Otherwise, use a fallback.
-        if os.environ.get("GIT_IT_WRITE_WEBHOOK_SETUP") == "true":  # Check an environment variable
-            print("Webhook is set up. Committing and pushing...")
-            if not commit_and_push(f"Add article: {selected_topic['topic']}"):
-                raise ValueError("Git commit and push failed")
-            print("Article will be published automatically via webhook.")
-        else:
-            print("Webhook is NOT set up.  Attempting manual trigger...")
-            # Choose ONE of the hypothetical trigger methods (and uncomment it):
-            # trigger_git_it_write_pull()  # Hypothetical REST API
-            # trigger_git_it_write_wpcli() # Hypothetical WP-CLI
-            print("Manual trigger attempted. Check Git it Write logs for results.")
-            print("  **IMPORTANT:** Ensure you have configured the correct")
-            print("  trigger method (REST API or WP-CLI) and provided")
-            print("  the necessary credentials/paths in the constants.")
+        if not commit_and_push(f"Add article: {selected_topic['topic']}"):
+            raise ValueError("Git commit and push failed")
+        print("Article will be published automatically via webhook.")
 
 
     except Exception as e:
