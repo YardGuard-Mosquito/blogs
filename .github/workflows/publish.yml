@@ -2,7 +2,7 @@ name: Auto-Publish Articles
 
 on:
   schedule:
-    - cron: '30 12 * * *'  # 7:30 AM EST = 12:30 PM UTC (adjusts for -5h offset)
+    - cron: '30 12 * * *'  # 7:30 AM EST = 12:30 PM UTC
   workflow_dispatch:
 
 jobs:
@@ -27,9 +27,5 @@ jobs:
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
-        WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
-        WP_USERNAME: ${{ secrets.WP_USERNAME }}
-        WP_APPLICATION_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        WP_CATEGORY_ID: ${{ secrets.WP_CATEGORY_ID }}
       run: |
         python publish_article.py
