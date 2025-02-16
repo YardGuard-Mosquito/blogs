@@ -22,8 +22,8 @@ MAX_URLS = 5  # Maximum URLs to *process*, even if more are present
 DEFAULT_CATEGORY_ID = 1
 DEFAULT_TAG_ID = 13
 GIT_REPO_PATH = "/path/to/your/local/repo"  #  **CHANGE THIS** to your local repo path
-GIT_POSTS_FOLDER = "posts"  #  **CHANGE THIS** if your posts are in a different folder
-
+GIT_POSTS_FOLDER = "docs"  # **CHANGE THIS** to match the plugin's expectations.  "docs" is common.
+IMAGE_FOLDER = "_images" # As per the plugin documentation
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
     """
@@ -173,6 +173,7 @@ def validate_topic_data(topic_data: Dict) -> bool:
 def generate_markdown_article(topic_data: Dict) -> Optional[str]:
     """
     Generates a Markdown article using the Gemini API.  Handles optional URLs.
+    Follows the plugin's structural recommendations.
 
     Args:
         topic_data: A dictionary containing the topic and URLs (which may be empty).
@@ -357,7 +358,7 @@ def main():
         if not topics:
             print("No valid topics found, using fallback")
             topics = [{
-                'topic': 'Recent Advances in Artificial Intelligence',
+                'topic': 'Recent Advances in Artificial Intelligence',  # Fallback topic
                 'urls': []  # Empty URL list for the fallback
             }]
 
