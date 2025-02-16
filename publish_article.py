@@ -8,6 +8,10 @@ from datetime import datetime
 from io import StringIO
 from urllib.parse import urlparse
 from typing import List, Dict, Optional
+import warnings
+
+# Suppress Gemini API warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="google.generativeai")
 
 # Configuration constants
 MAX_RETRIES = 3
@@ -248,9 +252,12 @@ def post_to_wordpress(content: str) -> bool:
         if not title:
             raise ValueError("Missing article title")
 
-        keywords = extract_seo_keywords(content)
-        if not keywords:
-            print("Warning: No SEO keywords found")
+        # Convert and validate IDs
+        try:
+            category_id = int(os.getenv('WP_CATEGORY_ID', '1'))
+            tag_id = int(os.getenv('WP_TAG_ID', '13'))
+        except ValueError as e:
+            raise ValueError(f"Invalid ID format: {str(e)}") from e
 
         wp_endpoint = os.environ['WP_ENDPOINT']
         auth = (
@@ -262,10 +269,12 @@ def post_to_wordpress(content: str) -> bool:
             "title": title,
             "content": f"<!--markdown-->\n{content}",
             "status": "publish",
-            "categories": [os.getenv('WP_CATEGORY_ID', '1')],
-            "tags": keywords[:5],
+            "categories": [category_id],
+            "tags": [tag_id],  # Now using validated integer ID
             "date": datetime.now().isoformat()
         }
+
+        print(f"Debug: Final WordPress payload: {payload}")
 
         response = requests.post(
             wp_endpoint,
@@ -353,7 +362,6 @@ def main():
 
     except Exception as e:
         print(f"\nCritical error: {str(e)}")
-        # Implement emergency notification here
         raise SystemExit(1)
 
 if __name__ == "__main__":
