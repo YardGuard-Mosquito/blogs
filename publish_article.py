@@ -9,6 +9,7 @@ from urllib.parse import urlparse, quote_plus
 from typing import List, Dict, Optional
 import warnings
 import git  # Import GitPython
+import re  # Import the regular expression module
 
 # Suppress Gemini API warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="google.generativeai")
@@ -26,17 +27,7 @@ GIT_POSTS_FOLDER = "docs"  # **CHANGE THIS** to match the plugin's expectations.
 IMAGE_FOLDER = "_images" # As per the plugin documentation
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
-    """
-    Fetches topics and URLs from a Google Sheet.  URLs are now optional.
-
-    Args:
-        sheet_url: The URL of the Google Sheet.
-
-    Returns:
-        A list of dictionaries, where each dictionary represents a topic
-        and its associated URLs (which may be an empty list).
-        Returns an empty list on failure.
-    """
+    """Fetches topics and URLs from a Google Sheet (same as before)."""
     session = requests.Session()
     adapter = requests.adapters.HTTPAdapter(max_retries=MAX_RETRIES)
     session.mount('https://', adapter)
@@ -81,10 +72,10 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
 
                 url_list = []
                 raw_urls = row.get('URLs', '')
-                if raw_urls:  # Only process URLs if the field is not empty
+                if raw_urls:
                     for url in raw_urls.split('|'):
                         url = url.strip()
-                        if not url:  # Skip empty URLs after splitting
+                        if not url:
                             continue
                         try:
                             parsed = urlparse(url)
@@ -93,16 +84,15 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
                                     url_list.append(url)
                                 else:
                                     print(f"Row {row_num}: Exceeded max URLs ({MAX_URLS}), truncating")
-                                    break  # Stop processing URLs for this row
+                                    break
                             else:
                                 print(f"Row {row_num}: Invalid URL scheme - {url}")
                         except ValueError:
                             print(f"Row {row_num}: Malformed URL - {url}")
-                # else:  # No 'else' needed - url_list will be empty by default
 
                 topics.append({
                     'topic': topic,
-                    'urls': url_list  # Always add the URL list, even if empty
+                    'urls': url_list
                 })
 
             if not topics:
@@ -125,16 +115,7 @@ def get_article_topics(sheet_url: str) -> List[Dict]:
 
 
 def validate_topic_data(topic_data: Dict) -> bool:
-    """
-    Validates the structure and content of a topic data dictionary.
-    URLs are now considered optional (can be an empty list).
-
-    Args:
-        topic_data: A dictionary containing topic information.
-
-    Returns:
-        True if the data is valid, False otherwise.
-    """
+    """Validates the structure and content of a topic data dictionary (same as before)."""
     if not isinstance(topic_data, dict):
         print("Invalid topic data format")
         return False
@@ -150,9 +131,6 @@ def validate_topic_data(topic_data: Dict) -> bool:
     if 'urls' not in topic_data or not isinstance(topic_data['urls'], list):
         print("Missing or invalid 'urls' field.")
         return False
-
-    # No length check for 'urls' - it can be empty
-    # We still validate the *contents* of the list if it's not empty
 
     for url in topic_data['urls']:
         if not isinstance(url, str):
@@ -171,16 +149,7 @@ def validate_topic_data(topic_data: Dict) -> bool:
 
 
 def generate_markdown_article(topic_data: Dict) -> Optional[str]:
-    """
-    Generates a Markdown article using the Gemini API.  Handles optional URLs.
-    Follows the plugin's structural recommendations.
-
-    Args:
-        topic_data: A dictionary containing the topic and URLs (which may be empty).
-
-    Returns:
-        The generated Markdown article as a string, or None on failure.
-    """
+    """Generates a Markdown article (same as before, but now returns title)."""
     if not validate_topic_data(topic_data):
         raise ValueError("Invalid topic data structure")
 
@@ -188,17 +157,17 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
     model = genai.GenerativeModel('gemini-pro')
 
     topic = topic_data['topic']
-    urls = topic_data['urls']  # URLs can now be an empty list
+    urls = topic_data['urls']
 
     try:
-        if urls:  # Only create the links instruction if there are URLs
+        if urls:
             links_list = '\n'.join([f"[{i+1}] {url}" for i, url in enumerate(urls)])
             links_instruction = f"""Include 2-4 contextual links in the article body using markdown format.
             Use these sources where appropriate:
             {links_list}
             Add a references section at the end with corresponding numbers."""
         else:
-            links_instruction = ""  # No links instruction if no URLs
+            links_instruction = ""
             print("No valid URLs provided - generating without external links")
 
         prompt = f"""Write a comprehensive 800-word technical article about {topic} using Markdown.
@@ -263,28 +232,28 @@ def generate_markdown_article(topic_data: Dict) -> Optional[str]:
         if not response.text:
             raise ValueError("Empty response from API")
 
-        return response.text
+        # Extract the title from the generated Markdown
+        match = re.search(r"^#\s+(.+)$", response.text, re.MULTILINE)
+        if match:
+            title = match.group(1).strip()
+        else:
+            title = None  # Use the topic as a fallback if no title is found
+            print("Warning: Could not extract title from Markdown. Using topic as filename.")
+
+        return response.text, title
+
 
     except genai.types.BlockedPromptError as e:
         print(f"Content generation blocked: {e}")
-        return None
+        return None, None
     except Exception as e:
         print(f"Generation error: {e}")
-        return None
+        return None, None
 
 
 def add_references_section(content: str, urls: List[str]) -> str:
-    """
-    Adds a formatted references section to the Markdown content (if URLs exist).
-
-    Args:
-        content: The Markdown content.
-        urls: A list of URLs to include in the references (can be empty).
-
-    Returns:
-        The content with the added references section (or original if no URLs).
-    """
-    if not urls:  # No references if the URL list is empty
+    """Adds a formatted references section (same as before)."""
+    if not urls:
         return content
 
     references = "\n\n## References\n" + '\n'.join(
@@ -294,7 +263,7 @@ def add_references_section(content: str, urls: List[str]) -> str:
 
 
 def extract_seo_keywords(content: str) -> List[str]:
-    """Extracts SEO keywords from the generated content."""
+    """Extracts SEO keywords (same as before)."""
     try:
         keywords_section = content.split("## SEO Keywords")[1]
         keywords = [line.replace('-', '').strip() for line in keywords_section.split('\n') if line.startswith('-')]
@@ -306,17 +275,18 @@ def extract_seo_keywords(content: str) -> List[str]:
         print(f"Keyword extraction error: {e}")
         return []
 
-def save_markdown_to_git(markdown_content: str, topic: str) -> bool:
-    """Saves the Markdown content to a file in the Git repository."""
+def save_markdown_to_git(markdown_content: str, title: Optional[str], topic:str) -> bool:
+    """Saves the Markdown content to a file, using the title for the filename."""
     try:
-        # Create a URL-safe slug from the topic
-        file_slug = quote_plus(topic.lower().replace(" ", "-"))
+        # Use the title for the filename if available, otherwise fall back to the topic
+        if title:
+            file_slug = quote_plus(title.lower().replace(" ", "-"))
+        else:
+            file_slug = quote_plus(topic.lower().replace(" ", "-"))
+
         filename = f"{file_slug}.md"
         filepath = os.path.join(GIT_REPO_PATH, GIT_POSTS_FOLDER, filename)
-
-        # Ensure the directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-
         with open(filepath, "w") as f:
             f.write(markdown_content)
         print(f"Markdown saved to: {filepath}")
@@ -326,10 +296,10 @@ def save_markdown_to_git(markdown_content: str, topic: str) -> bool:
         return False
 
 def commit_and_push(message: str) -> bool:
-    """Commits and pushes changes to the Git repository."""
+    """Commits and pushes changes (same as before)."""
     try:
         repo = git.Repo(GIT_REPO_PATH)
-        repo.git.add(A=True)  # Stage all changes
+        repo.git.add(A=True)
         repo.git.commit(m=message)
         origin = repo.remote(name='origin')
         origin.push()
@@ -344,7 +314,7 @@ def commit_and_push(message: str) -> bool:
 
 
 def main():
-    """Main function: Generates article, saves to Git, commits, and pushes."""
+    """Main function (now uses article title for filename)."""
     try:
         print("Initializing automated publisher...")
 
@@ -358,8 +328,8 @@ def main():
         if not topics:
             print("No valid topics found, using fallback")
             topics = [{
-                'topic': 'Recent Advances in Artificial Intelligence',  # Fallback topic
-                'urls': []  # Empty URL list for the fallback
+                'topic': 'Recent Advances in Artificial Intelligence',
+                'urls': []
             }]
 
         selected_topic = None
@@ -378,7 +348,7 @@ def main():
             print("No reference URLs provided.")
 
         print("\nGenerating article...")
-        article = generate_markdown_article(selected_topic)
+        article, title = generate_markdown_article(selected_topic)  # Get both content and title
 
         if not article:
             raise ValueError("Article generation failed")
@@ -391,14 +361,18 @@ def main():
             print("Warning: SEO keywords section missing")
 
         print("\nSaving Markdown to Git repository...")
-        if not save_markdown_to_git(processed_article, selected_topic['topic']):
+        # Pass the title to save_markdown_to_git
+        if not save_markdown_to_git(processed_article, title, selected_topic['topic']):
             raise ValueError("Failed to save Markdown to Git")
 
-        print("\nCommitting and pushing changes...")
-        if not commit_and_push(f"Add article: {selected_topic['topic']}"):
-            raise ValueError("Git commit and push failed")
-        print("Article will be published automatically via webhook.")
 
+        print("\nCommitting and pushing changes...")
+        # Use the title in the commit message if available, otherwise the topic
+        commit_message = f"Add article: {title if title else selected_topic['topic']}"
+        if not commit_and_push(commit_message):
+            raise ValueError("Git commit and push failed")
+
+        print("Article will be published automatically via webhook.")
 
     except Exception as e:
         print(f"\nCritical error: {e}")
