@@ -289,62 +289,6 @@ def add_references_section(content: str, urls: List[str]) -> str:
     return content.replace('## SEO Keywords', f"{references}\n\n## SEO Keywords")
 
 
-def post_to_wordpress(content: str) -> bool:
-    """
-    Posts the generated article to WordPress.
-
-    Args:
-        content: The Markdown content of the article.
-
-    Returns:
-        True if the post was successful, False otherwise.
-    """
-    if not content:
-        raise ValueError("Empty content provided")
-
-    try:
-        title = content.split('\n')[0].replace('#', '').strip()
-        if not title:
-            raise ValueError("Missing article title")
-
-        try:
-            category_id = int(os.getenv('WP_CATEGORY_ID', str(DEFAULT_CATEGORY_ID)))
-        except ValueError:
-            category_id = DEFAULT_CATEGORY_ID
-            print(f"Invalid WP_CATEGORY_ID, using default: {DEFAULT_CATEGORY_ID}")
-
-        try:
-            tag_id = int(os.getenv('WP_TAG_ID', str(DEFAULT_TAG_ID)))
-        except ValueError:
-            tag_id = DEFAULT_TAG_ID
-            print(f"Invalid WP_TAG_ID, using default: {DEFAULT_TAG_ID}")
-
-        wp_endpoint = os.environ['WP_ENDPOINT']
-        auth = (os.environ['WP_USERNAME'], os.environ['WP_APPLICATION_PASSWORD'])
-
-        payload = {
-            "title": title,
-            "content": f"<!--markdown-->\n{content}",
-            "status": "publish",
-            "categories": [category_id],
-            "tags": [tag_id],
-            "date": datetime.now().isoformat()
-        }
-
-        response = requests.post(wp_endpoint, auth=auth, json=payload, timeout=30)
-        response.raise_for_status()
-        return True
-
-    except requests.exceptions.RequestException as e:
-        print(f"WordPress API Error: {e}")
-        if e.response is not None:
-            print(f"Response body: {e.response.text}")
-        return False
-    except Exception as e:
-        print(f"Posting error: {e}")
-        return False
-
-
 def extract_seo_keywords(content: str) -> List[str]:
     """Extracts SEO keywords from the generated content."""
     try:
