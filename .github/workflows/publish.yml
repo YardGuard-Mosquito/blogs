@@ -21,8 +21,8 @@ jobs:
       # --- ADD THESE STEPS TO CONFIGURE GIT ---
       - name: Configure Git User
         run: |
-          git config --global user.email "your-email@example.com"
-          git config --global user.name "Your GitHub Username"
+          git config --global user.email "rmkenv@gmail.com"
+          git config --global user.name "rmkenv"
       # --- END GIT CONFIGURATION ---
 
       - name: Install Dependencies
