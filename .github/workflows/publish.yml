@@ -6,35 +6,36 @@ on:
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+    publish:
+      runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v4
+          with:  # Add the 'with' block here
+            token: ${{ secrets.ACTIONS_PAT }} # Use the PAT
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.10'
 
-      # --- ADD THESE STEPS TO CONFIGURE GIT ---
-      - name: Configure Git User
-        run: |
-          git config --global user.email "rmkenv@gmail.com"
-          git config --global user.name "rmkenv"
-      # --- END GIT CONFIGURATION ---
+        - name: Configure Git User
+          run: |
+            git config --global user.email "your-email@example.com"
+            git config --global user.name "Your GitHub Username"
 
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
+        - name: Install Dependencies
+          run: pip install -r requirements.txt
 
-      - name: Publish Article
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
-        run: python publish_article.py
+        - name: Publish Article
+          env:
+            GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+            GOOGLE_SHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
+          run: python publish_article.py
 
-      - name: Post Set up Python
-        if: always()
-        run: |
-          echo "Python setup complete"
+        - name: Post Set up Python
+          if: always()
+          run: |
+            echo "Python setup complete"
+  
