@@ -8,8 +8,8 @@ from io import StringIO
 from urllib.parse import urlparse, quote_plus
 from typing import List, Dict, Optional
 import warnings
-import git  # Import GitPython
-import re  # Import the regular expression module
+import git
+import re
 
 # Suppress Gemini API warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="google.generativeai")
@@ -19,14 +19,14 @@ MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 BACKOFF_FACTOR = 2
 MAX_TOPIC_LENGTH = 200
-MAX_URLS = 5  # Maximum URLs to *process*, even if more are present
-DEFAULT_CATEGORY_ID = 1  # You can remove this if you don't use it
-DEFAULT_TAG_ID = 13  # You can remove this if you don't use it
+MAX_URLS = 5
+DEFAULT_CATEGORY_ID = 1  # Optional
+DEFAULT_TAG_ID = 13  # Optional
 
-# --- CRITICAL: CHANGE THESE ---
-GIT_REPO_PATH = "/path/to/your/local/repo"  #  **ABSOLUTE PATH** to your local Git repo
-GIT_POSTS_FOLDER = "docs"  # Folder where Markdown files should go (check your plugin settings)
-IMAGE_FOLDER = "_images" # As per the plugin documentation
+# --- CRITICAL: CORRECTED PATHS ---
+GIT_REPO_PATH = "."  # Use the current working directory (root of the repo)
+GIT_POSTS_FOLDER = "docs"  # Folder within the repo (MAKE SURE THIS EXISTS!)
+IMAGE_FOLDER = "_images"
 
 def get_article_topics(sheet_url: str) -> List[Dict]:
     """Fetches topics and URLs from a Google Sheet (published as CSV)."""
@@ -296,7 +296,7 @@ def save_markdown_to_git(markdown_content: str, title: Optional[str], topic: str
 
         with open(filepath, "w") as f:
             f.write(markdown_content)
-        print(f"Markdown saved to: {filepath}")
+        print(f"Markdown saved to: {filepath}")  # This will now show a relative path
         return True
 
     except Exception as e:
